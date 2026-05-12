@@ -1,0 +1,62 @@
+-- Daily Usage Tracking for Free Tier Limits
+CREATE TABLE IF NOT EXISTS public.daily_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  analysis_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  
+  UNIQUE(user_id, date)
+);
+
+-- Enable RLS
+ALTER TABLE public.daily_usage ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Users can view their own usage
+CREATE POLICY "Users can view their own usage"
+  ON public.daily_usage
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- Policy: Users can insert their own usage
+CREATE POLICY "Users can insert their own usage"
+  ON public.daily_usage
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+-- Policy: Users can update their own usage
+CREATE POLICY "Users can update their own usage"
+  ON public.daily_usage
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Index for fast lookups
+CREATE INDEX idx_daily_usage_user_id_date ON public.daily_usage(user_id, date);
+
+-- Function to check if user has reached daily limit (3 for free tier)
+CREATE OR REPLACE FUNCTION public.check_daily_limit(check_user_id UUID, limit_count INT DEFAULT 3)
+RETURNS BOOLEAN AS $$
+DECLARE
+  is_pro BOOLEAN;
+  today_usage INT;
+BEGIN
+  -- Check if user is pro (unlimited)
+  is_pro := public.is_pro_user(check_user_id);
+  IF is_pro THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- Check today's usage count
+  SELECT COALESCE(analysis_count, 0) INTO today_usage
+  FROM public.daily_usage
+  WHERE user_id = check_user_id
+  AND date = CURRENT_DATE;
+  
+  -- Return true if under limit
+  RETURN today_usage < limit_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
