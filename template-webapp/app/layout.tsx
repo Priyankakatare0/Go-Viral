@@ -5,7 +5,7 @@ import { SubscriptionProvider } from "@/contexts/subscription-context"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Footer } from "@/components/footer"
 import { Toaster } from "sonner"
-// import "./globals.css"
+import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"] })
 
